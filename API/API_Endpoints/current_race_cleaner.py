@@ -173,6 +173,8 @@ async def get_next_race():
     if race_session and race_session.get("datetime_rfc3339"):
         race_dt = datetime.fromisoformat(race_session["datetime_rfc3339"])
 
+    expire = default_expire
+    expiry_dt = now + timedelta(seconds=default_expire)
     if next_event and next_event.get("datetime"):
         try:
             next_event_dt = datetime.fromisoformat(next_event["datetime"])

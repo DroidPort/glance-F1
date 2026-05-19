@@ -11,7 +11,7 @@ import json
 from fastapi_cache import FastAPICache
 
 from .map_generator import generate_track_map_svg, remove_accents
-from ..helpers.global_vars import NEXT_RACE_API_URL
+from ..helpers.global_vars import NEXT_RACE_API_URL, default_expire
 from ..helpers.time_functions import MT
 
 router = APIRouter()
@@ -130,15 +130,17 @@ async def get_dynamic_track_map():
     except Exception as e:
         return PlainTextResponse(str(e), status_code=500)
 
+    expire = default_expire
+    expiry_dt = now + timedelta(seconds = default_expire)
     if now > race_dt:
         expire = int((race_dt - now).total_seconds())
         expiry_dt = race_dt
-    elif now < race_dt + timedelta(hours = 1):
-        expiry_dt = race_dt + timedelta(hours=1)
+    elif now < race_dt + timedelta(seconds = default_expire):
+        expiry_dt = race_dt + timedelta(seconds = default_expire)
         expire = int((expiry_dt - now).total_seconds())
     else:
-        expire = 3600
-        expiry_dt = now + timedelta(seconds=3600)
+        expire = default_expire
+        expiry_dt = now + timedelta(seconds= default_expire)
 
         if old_signature and old_signature != upstream_signature:
             print("Race changed, cache invalid, fetching new map")

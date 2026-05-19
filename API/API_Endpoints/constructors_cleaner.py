@@ -55,19 +55,22 @@ async def get_constructors_championship():
     now = datetime.now(MT)
     race_dt = await get_next_race_end()
 
+    expire = default_expire
+    expiry_dt = now + timedelta(seconds=default_expire)
+
     cached = await cache.get(cache_key)
     old_signature = cached.get("result_signature") if cached else None
     new_signature = make_signature(results)
     if race_dt:
         if race_dt > now:
-            expire = int((race_dt - now).total_seconds())
+            expire = max(60, int((race_dt - now).total_seconds()))
             expiry_dt = race_dt
         elif now < race_dt + timedelta(seconds=default_expire):
             expiry_dt = race_dt + timedelta(seconds=default_expire)
             expire = int((expiry_dt - now).total_seconds())
         else:
             expire = default_expire
-            expiry_dt = now + timedelta(seconds=3600)
+            expiry_dt = now + timedelta(seconds=default_expire)
 
             async with httpx.AsyncClient() as client:
                 results_response = await client.get("https://f1api.dev/api/current/constructors-championship", timeout=60)
