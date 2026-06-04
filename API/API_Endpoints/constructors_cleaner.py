@@ -10,7 +10,7 @@ from .helpers.global_vars import NEXT_RACE_API_URL, default_expire
 from .helpers.time_functions import MT, UTC
 
 router = APIRouter()
-    
+
 def make_signature(results):
     return hashlib.md5(json.dumps(results, 
         sort_keys=True).encode()).hexdigest()

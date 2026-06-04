@@ -5,11 +5,15 @@ from datetime import datetime, timedelta
 import hashlib
 import json
 
+import fastf1
+from fastf1.ergast import Ergast 
+
 from .helpers.functions import country_to_code, get_next_race_end, format_team_name
 from .helpers.global_vars import NEXT_RACE_API_URL, country_correction_map, default_expire
 from .helpers.time_functions import MT, UTC
 
 router = APIRouter()
+
 
 def make_signature(results):
     return hashlib.md5(json.dumps(results, 
@@ -24,32 +28,24 @@ async def get_drivers_championship():
     if cached:
         return cached
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get("https://f1api.dev/api/current/drivers-championship", timeout=60)
-        if response.status_code != 200:
-            return {"error": "Failed to fetch data"}
+    season = datetime.now(MT).year
+    ergast = Ergast()
+    standings = ergast.get_driver_standings(season = season)
+    standing_data = standings.content[0]
 
-        data = response.json()
-
-    drivers = data.get("drivers_championship", [])
     results = []
-    for entry in drivers:
-        driver = entry.get("driver", {})
-        team = entry.get("team", {})
-        country = driver.get("nationality", "")
-        if country in country_correction_map:
-            country = country_correction_map[country]
+    for _, row in standing_data.iterrows():
         results.append({
-            "surname": driver.get("surname"),
-            "position": entry.get("position"),
-            "points": entry.get("points"),
-	        "teamId": format_team_name(team.get("teamId")),
-            "country": country,
-            "flag": country_to_code(country)
+            "driver": row["familyName"],
+            "position": row["position"],
+            "points": row["points"],
+            "teamId": format_team_name(row["constructorNames"][0]),
+            "country": row["driverNationality"],
+            "flag": row["driverNationality"]
         })
 
     # Cache until race ends or 1 hour (in case f1/last is down or something)
-    now = datetime.now(MT)
+    now = datetime.now(MT).year
     race_dt = await get_next_race_end()
 
     expire = default_expire
@@ -93,7 +89,7 @@ async def get_drivers_championship():
 
 
     response_data = {
-        "season": data.get("season"), 
+        "season": season, 
         "cache_expires": expiry_dt.isoformat(),
         "drivers": results,
         "result_signature": new_signature}
