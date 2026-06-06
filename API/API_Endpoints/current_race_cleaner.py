@@ -75,6 +75,7 @@ async def get_next_race():
     # Clean up race name
     year = calendar_data.get("season")
     calendar_round = next_race.get("round")
+    raw_round = calendar_round  # Store original round for fastf1 lookups
 
     # Handle issues in 2026 calendar due to race cancellations
     if year == 2026 and calendar_round >= 6:
@@ -238,6 +239,7 @@ async def get_next_race():
     response_data = {
         "season": calendar_data.get("season"),
         "round": calendar_round,
+        "raw_round": raw_round,
         "timezone": TZ,
         "next_event": next_event,
         "cache_expires": expiry_dt.isoformat(),
