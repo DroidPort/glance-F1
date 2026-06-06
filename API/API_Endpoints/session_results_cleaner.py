@@ -67,8 +67,11 @@ def format_practice_results(session):
 
         drivers = []
         for pos, (_, row) in enumerate(fastest.iterrows(), start=1):
+            import math
             driver_number = row["DriverNumber"]
             lap_time = row["LapTime"]
+            if lap_time is None or (isinstance(lap_time, float) and math.isnan(lap_time)):
+                continue
 
             # Get driver info
             driver_laps = laps[laps["DriverNumber"] == driver_number]
@@ -124,7 +127,11 @@ def format_results(session, session_type):
         for _, row in results.iterrows():
             position = row.get("Position")
             try:
-                position = int(position)
+                import math
+                if position is None or (isinstance(position, float) and math.isnan(position)):
+                    position = "-"
+                else:
+                    position = int(position)
             except Exception:
                 position = "-"
 
