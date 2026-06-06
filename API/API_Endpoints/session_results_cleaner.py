@@ -221,24 +221,14 @@ async def get_session_results():
     now = datetime.now(MT)
     year = now.year
 
-    # Get current round from next_race cache — use raw_round for fastf1 lookups
-    next_race_cached = await cache.get("f1:next_race")
-    if next_race_cached:
-        gp_round = next_race_cached.get("raw_round") or next_race_cached.get("round")
-    else:
-        loop = asyncio.get_event_loop()
-        try:
-            schedule = await loop.run_in_executor(executor, fastf1.get_event_schedule, year)
-            current_event = None
-            for _, event in schedule.iterrows():
-                event_date = event.get("EventDate")
-                if event_date and str(event_date)[:10] <= now.strftime("%Y-%m-%d"):
-                    current_event = event
-            if current_event is None:
-                return {"raceName": "", "sessions": []}
-            gp_round = int(current_event.get("RoundNumber", 1))
-        except Exception as e:
-            return {"raceName": "", "sessions": [], "error": str(e)}
+    # Get current round — call get_next_race directly to ensure cache is populated
+    from .current_race_cleaner import get_next_race
+    next_race_data = await cache.get("f1:next_race")
+    if not next_race_data:
+        next_race_data = await get_next_race()
+    gp_round = next_race_data.get("round") if next_race_data else None
+    if not gp_round:
+        return {"raceName": "", "sessions": [], "error": "Could not determine current round"}
 
     tasks = [
         fetch_session_fastf1(year, gp_round, session_type, label)
