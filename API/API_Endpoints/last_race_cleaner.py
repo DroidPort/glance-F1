@@ -10,7 +10,7 @@ import os
 import fastf1
 
 from .helpers.functions import country_to_code
-from .helpers.global_vars import country_correction_map
+from .helpers.global_vars import nationality_map
 from .helpers.time_functions import MT
 
 router = APIRouter()
@@ -56,8 +56,8 @@ async def get_last_race():
         time_str = entry.get("time", "")
 
         nationality = driver.get("nationality", "")
-        if nationality in country_correction_map:
-            nationality = country_correction_map[nationality]
+        if nationality in nationality_map:
+            nationality = nationality_map[nationality]
 
         is_dnf = str(position) == "NC"
         dnf_laps = parse_dnf_laps(time_str) if is_dnf else None

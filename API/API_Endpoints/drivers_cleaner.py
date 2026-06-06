@@ -9,7 +9,7 @@ import fastf1
 from fastf1.ergast import Ergast 
 
 from .helpers.functions import country_to_code, get_next_race_end, format_team_name
-from .helpers.global_vars import NEXT_RACE_API_URL, country_correction_map, default_expire
+from .helpers.global_vars import NEXT_RACE_API_URL, nationality_map, default_expire
 from .helpers.time_functions import MT, UTC
 
 router = APIRouter()
@@ -35,17 +35,21 @@ async def get_drivers_championship():
 
     results = []
     for _, row in standing_data.iterrows():
+        if row["driverNationality"] in nationality_map:
+            row["driverNationality"] = nationality_map[row["driverNationality"]]
+        else:
+            row["driverNationality"] = ""
+
         results.append({
             "driver": row["familyName"],
             "position": row["position"],
             "points": row["points"],
             "teamId": format_team_name(row["constructorNames"][0]),
             "country": row["driverNationality"],
-            "flag": row["driverNationality"]
+            "flag": country_to_code(row["driverNationality"])
         })
 
-    # Cache until race ends or 1 hour (in case f1/last is down or something)
-    now = datetime.now(MT).year
+    now = datetime.now(MT)
     race_dt = await get_next_race_end()
 
     expire = default_expire
@@ -66,10 +70,25 @@ async def get_drivers_championship():
             expiry_dt = now + timedelta(seconds=default_expire)
 
             async with httpx.AsyncClient() as client:
-                results_response = await client.get("https://f1api.dev/api/current/drivers-championship", timeout=60)
+                season = datetime.now(MT).year
+                ergast = Ergast()
+                standings = ergast.get_driver_standings(season = season)
+                fresh_standings = standings.content[0]
+
+                fresh_results = []
+                for _, row in fresh_standings.iterrows():
+                    fresh_results.append({
+                        "driver": row["familyName"],
+                        "position": row["position"],
+                        "points": row["points"],
+                        "teamId": format_team_name(row["constructorNames"][0]),
+                        "country": row["driverNationality"],
+                        "flag": row["driverNationality"]
+                    })
+
                 next_response = await client.get(NEXT_RACE_API_URL)
 
-            fresh_results = results_response.json()
+            fresh_results = fresh_results.json()
             data = next_response.json()
             
             new_signature = make_signature(fresh_results)
