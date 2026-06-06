@@ -5,8 +5,11 @@ from datetime import datetime, timedelta
 import hashlib
 import json
 
+import fastf1
+from fastf1.ergast import Ergast 
+
 from .helpers.functions import country_to_code, get_next_race_end, format_team_name
-from .helpers.global_vars import NEXT_RACE_API_URL, country_correction_map, default_expire
+from .helpers.global_vars import NEXT_RACE_API_URL, nationality_map, default_expire
 from .helpers.time_functions import MT, UTC
 
 router = APIRouter()
@@ -20,83 +23,31 @@ async def get_drivers_championship():
     cache = FastAPICache.get_backend()
     cache_key = "drivers_championship"
 
-    cached = await cache.get(cache_key)
-    if cached:
-        return cached
+    season = datetime.now(MT).year
+    ergast = Ergast()
+    standings = ergast.get_driver_standings(season = season)
+    standing_data = standings.content[0]
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get("https://f1api.dev/api/current/drivers-championship", timeout=60)
-        if response.status_code != 200:
-            return {"error": "Failed to fetch data"}
-
-        data = response.json()
-
-    drivers = data.get("drivers_championship", [])
     results = []
-    for entry in drivers:
-        driver = entry.get("driver", {})
-        team = entry.get("team", {})
-        country = driver.get("nationality", "")
-        if country in country_correction_map:
-            country = country_correction_map[country]
-        results.append({
-            "surname": driver.get("surname"),
-            "position": entry.get("position"),
-            "points": entry.get("points"),
-	        "teamId": format_team_name(team.get("teamId")),
-            "country": country,
-            "flag": country_to_code(country)
-        })
-
-    # Cache until race ends or 1 hour (in case f1/last is down or something)
-    now = datetime.now(MT)
-    race_dt = await get_next_race_end()
-
-    expire = default_expire
-    expiry_dt = now + timedelta(seconds=default_expire)
-
-    cached = await cache.get(cache_key)
-    old_signature = cached.get("result_signature") if cached else None
-    new_signature = make_signature(results)
-    if race_dt:
-        if race_dt > now:
-            expire = max(60, int((race_dt - now).total_seconds()))
-            expiry_dt = race_dt
-        elif now < race_dt + timedelta(seconds=default_expire):
-            expiry_dt = race_dt + timedelta(seconds=default_expire)
-            expire = int((expiry_dt - now).total_seconds())
+    for _, row in standing_data.iterrows():
+        if row["driverNationality"] in nationality_map:
+            row["driverNationality"] = nationality_map[row["driverNationality"]]
         else:
-            expire = default_expire
-            expiry_dt = now + timedelta(seconds=default_expire)
+            row["driverNationality"] = ""
 
-            async with httpx.AsyncClient() as client:
-                results_response = await client.get("https://f1api.dev/api/current/drivers-championship", timeout=60)
-                next_response = await client.get(NEXT_RACE_API_URL)
-
-            fresh_results = results_response.json()
-            data = next_response.json()
-            
-            new_signature = make_signature(fresh_results)
-
-            if old_signature != new_signature:
-                new_next_dt = data.get("next_event", {}).get("datetime")
-
-                if new_next_dt:
-                    next_race_dt = datetime.fromisoformat(new_next_dt)
-
-                    if next_race_dt.tzinfo is None:
-                        next_race_dt = UTC.localize(next_race_dt)
-                    next_race_dt = next_race_dt.astimezone(MT)
-
-                    expire = int((next_race_dt - now).total_seconds())
-                    expiry_dt = next_race_dt
+        results.append({
+            "driver": row["familyName"],
+            "position": row["position"],
+            "points": row["points"],
+            "teamId": format_team_name(row["constructorNames"][0]),
+            "country": row["driverNationality"],
+            "flag": country_to_code(row["driverNationality"])
+        })
 
 
     response_data = {
-        "season": data.get("season"), 
-        "cache_expires": expiry_dt.isoformat(),
-        "drivers": results,
-        "result_signature": new_signature}
+        "season": season, 
+        "drivers": results}
 
-    await cache.set(cache_key, response_data, expire=expire)
+    await cache.set(cache_key, response_data, expire=600)
     return response_data
