@@ -1,3 +1,5 @@
+import os
+
 # Global Variables
 NEXT_RACE_API_URL = "http://localhost:4463/f1/next_race/"
 
