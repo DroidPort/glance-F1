@@ -22,5 +22,6 @@ nationality_map = {
     "Brazilian": "Brazil",
     "Mexican": "Mexico",
     "Chinese": "China",
-    "Finnish": "Finland"
+    "Finnish": "Finland",
+    "American": "United States"
     }

@@ -5,8 +5,11 @@ from datetime import datetime, timedelta
 import hashlib
 import json
 
+import fastf1
+from fastf1.ergast import Ergast 
+
 from .helpers.functions import country_to_code, get_next_race_end, format_team_name
-from .helpers.global_vars import NEXT_RACE_API_URL, default_expire
+from .helpers.global_vars import NEXT_RACE_API_URL, nationality_map, default_expire
 from .helpers.time_functions import MT, UTC
 
 router = APIRouter()
@@ -24,34 +27,28 @@ async def get_constructors_championship():
     if cached:
         return cached
 
-    async with httpx.AsyncClient() as client:
-        response = await client.get("https://f1api.dev/api/current/constructors-championship", timeout=60)
-        if response.status_code != 200:
-            return {"error": "Failed to fetch data"}
+    season = datetime.now(MT).year
+    ergast = Ergast()
+    standings = ergast.get_constructor_standings(season = season)
+    standing_data = standings.content[0]
 
-        data = response.json()
-
-    constructors = data.get("constructors_championship", [])
     results = []
-    for entry in constructors:
+    for _, row in standing_data.iterrows():
+        if row["constructorNationality"] in nationality_map:
+            row["constructorNationality"] = nationality_map[row["constructorNationality"]]
+        else:
+            row["constructorNationality"] = ""
 
-        # Clean up team names and get rid of standard boilerplate slop
-        team = entry.get("team", {})
-        team_name = team.get("teamName")
-        for word in ['Formula 1', 'F1', 'Racing', 'Team', 'Scuderia']:
-            team_name = team_name.replace(word, "").strip()
-        country = team.get("country", "")
         results.append({
-            "team": team_name,
-            "position": entry.get("position"),
-            "points": entry.get("points"),
-            "wins": entry.get("wins") or 0,
-            "country": country,
-            "flag": country_to_code(country),
-            "wiki": team.get("url")
+            "team": row["constructorName"],
+            "position": row["position"],
+            "points": row["points"],
+            "wins": row["wins"],
+            "country": row["constructorNationality"],
+            "flag": country_to_code(row["constructorNationality"]),
+            "wiki": row["constructorUrl"]
         })
 
-    # Cache until event ends or 1 hour (in case f1/last is down or something
     now = datetime.now(MT)
     race_dt = await get_next_race_end()
 
@@ -73,10 +70,30 @@ async def get_constructors_championship():
             expiry_dt = now + timedelta(seconds=default_expire)
 
             async with httpx.AsyncClient() as client:
-                results_response = await client.get("https://f1api.dev/api/current/constructors-championship", timeout=60)
+                season = datetime.now(MT).year
+                ergast = Ergast()
+                fresh_standings = ergast.get_constructor_standings(season = season)
+                fresh_standings = fresh_standings.content[0]
+
+                fresh_results = []
+                for _, row in fresh_standings.iterrows():
+                    if row["constructorNationality"] in nationality_map:
+                        row["constructorNationality"] = nationality_map[row["constructorNationality"]]
+                    else:
+                        row["constructorNationality"] = ""
+
+                    fresh_results.append({
+                        "team": row["constructorName"],
+                        "position": row["position"],
+                        "points": row["points"],
+                        "wins": row["wins"],
+                        "country": row["constructorNationality"],
+                        "flag": country_to_code(row["constructorNationality"]),
+                        "wiki": row["constructorUrl"]
+                    })
                 next_response = await client.get(NEXT_RACE_API_URL)
 
-            fresh_results = results_response.json()
+            fresh_results = fresh_results.json()
             data = next_response.json()
             
             new_signature = make_signature(fresh_results)
@@ -95,7 +112,7 @@ async def get_constructors_championship():
                     expiry_dt = next_race_dt
 
     response_data = {
-        "season": data.get("season"), 
+        "season": season, 
         "cache_expires": expiry_dt.isoformat(),
         "constructors": results,
         "result_signature": new_signature}

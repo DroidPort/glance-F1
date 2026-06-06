@@ -14,7 +14,6 @@ from .helpers.time_functions import MT, UTC
 
 router = APIRouter()
 
-
 def make_signature(results):
     return hashlib.md5(json.dumps(results, 
         sort_keys=True).encode()).hexdigest()
@@ -72,18 +71,23 @@ async def get_drivers_championship():
             async with httpx.AsyncClient() as client:
                 season = datetime.now(MT).year
                 ergast = Ergast()
-                standings = ergast.get_driver_standings(season = season)
-                fresh_standings = standings.content[0]
+                fresh_standings = ergast.get_driver_standings(season = season)
+                fresh_standings = fresh_standings.content[0]
 
                 fresh_results = []
                 for _, row in fresh_standings.iterrows():
+                    if row["driverNationality"] in nationality_map:
+                        row["driverNationality"] = nationality_map[row["driverNationality"]]
+                    else:
+                        row["driverNationality"] = ""
+
                     fresh_results.append({
                         "driver": row["familyName"],
                         "position": row["position"],
                         "points": row["points"],
                         "teamId": format_team_name(row["constructorNames"][0]),
                         "country": row["driverNationality"],
-                        "flag": row["driverNationality"]
+                        "flag": country_to_code(row["driverNationality"])
                     })
 
                 next_response = await client.get(NEXT_RACE_API_URL)
