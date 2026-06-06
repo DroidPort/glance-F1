@@ -214,10 +214,10 @@ async def get_session_results():
     now = datetime.now(MT)
     year = now.year
 
-    # Get current round from next_race cache
+    # Get current round from next_race cache — use raw_round for fastf1 lookups
     next_race_cached = await cache.get("f1:next_race")
     if next_race_cached:
-        gp_round = next_race_cached.get("round")
+        gp_round = next_race_cached.get("raw_round") or next_race_cached.get("round")
     else:
         loop = asyncio.get_event_loop()
         try:
