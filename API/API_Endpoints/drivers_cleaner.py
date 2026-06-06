@@ -36,7 +36,7 @@ async def get_drivers_championship():
             row["driverNationality"] = ""
 
         results.append({
-            "driver": row["familyName"],
+            "surname": row["familyName"],
             "position": row["position"],
             "points": row["points"],
             "teamId": format_team_name(row["constructorNames"][0]),
