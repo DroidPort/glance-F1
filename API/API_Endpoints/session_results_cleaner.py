@@ -56,10 +56,25 @@ def session_has_happened(session):
 
 def format_practice_results(session):
     """For FP sessions, use fastest lap per driver."""
+    import math
     try:
         laps = session.laps
         if laps is None or laps.empty:
             return None
+
+        # Build driver info lookup from session.results (has full names + flags)
+        driver_info = {}
+        try:
+            for _, r in session.results.iterrows():
+                dn = str(r.get("DriverNumber", ""))
+                driver_info[dn] = {
+                    "surname": r.get("LastName", r.get("Abbreviation", "")),
+                    "shortName": r.get("Abbreviation", ""),
+                    "flag": str(r.get("CountryCode", "")).lower(),
+                    "team": r.get("TeamName", ""),
+                }
+        except Exception:
+            pass
 
         # Get fastest lap per driver
         fastest = laps.groupby("DriverNumber")["LapTime"].min().reset_index()
@@ -67,20 +82,19 @@ def format_practice_results(session):
 
         drivers = []
         for pos, (_, row) in enumerate(fastest.iterrows(), start=1):
-            import math
-            driver_number = row["DriverNumber"]
+            driver_number = str(row["DriverNumber"])
             lap_time = row["LapTime"]
             if lap_time is None or (isinstance(lap_time, float) and math.isnan(lap_time)):
                 continue
 
-            # Get driver info
-            driver_laps = laps[laps["DriverNumber"] == driver_number]
-            if driver_laps.empty:
-                continue
+            info = driver_info.get(driver_number, {})
 
-            driver_row = driver_laps.iloc[0]
-            abbrev = driver_row.get("Driver", "")
-            team = driver_row.get("Team", "")
+            # Fallback to laps data if results lookup failed
+            if not info:
+                driver_laps = laps[laps["DriverNumber"] == row["DriverNumber"]]
+                if not driver_laps.empty:
+                    abbrev = driver_laps.iloc[0].get("Driver", "")
+                    info = {"surname": abbrev, "shortName": abbrev, "flag": "", "team": driver_laps.iloc[0].get("Team", "")}
 
             # Format lap time
             if hasattr(lap_time, 'total_seconds'):
@@ -91,21 +105,12 @@ def format_practice_results(session):
             else:
                 time_str = str(lap_time)
 
-            # Get flag from session results if available
-            flag = ""
-            try:
-                result_row = session.results[session.results["Abbreviation"] == abbrev]
-                if not result_row.empty:
-                    flag = str(result_row.iloc[0].get("CountryCode", "")).lower()
-            except Exception:
-                pass
-
             drivers.append({
                 "position": pos,
-                "surname": abbrev,
-                "shortName": abbrev,
-                "flag": flag,
-                "team": team,
+                "surname": info.get("surname", ""),
+                "shortName": info.get("shortName", ""),
+                "flag": info.get("flag", ""),
+                "team": info.get("team", ""),
                 "time": time_str,
             })
 
