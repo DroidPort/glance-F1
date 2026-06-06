@@ -235,14 +235,16 @@ async def get_next_race():
         expiry_dt = now + timedelta(seconds=expire)
 
 
-    # Fetch inline SVG map
+    # Fetch inline SVG map in thread to avoid blocking
     map_svg = ""
     try:
         from .map.router import generate_historical_track_map
-        map_svg = generate_historical_track_map({
-            "race": [next_race],
-            "season": calendar_data.get("season"),
-        })
+        from concurrent.futures import ThreadPoolExecutor
+        import asyncio
+        loop = asyncio.get_event_loop()
+        with ThreadPoolExecutor(max_workers=1) as ex:
+            map_data = {"race": [next_race], "season": calendar_data.get("season")}
+            map_svg = await loop.run_in_executor(ex, generate_historical_track_map, map_data)
     except Exception as e:
         print(f"Map generation failed: {e}")
 
