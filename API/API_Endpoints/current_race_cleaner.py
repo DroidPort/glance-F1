@@ -1,138 +1,4 @@
-- type: custom-api
-  title: Next Race
-  cache: 5m
-  url: http://192.168.0.210:4463/f1/next_race/
-  template: |
-    <div class="flex flex-column gap-10">
-      {{ $session := index (.JSON.Array "race") 0 }}
-      <p class="size-h5" style="font-size: 15px;">
-        {{ .JSON.String "season" }}, Round {{ .JSON.String "round" }}
-      </p>
-
-      <div class="margin-block-4">
-        <p class="color-highlight" style="font-size: 15px;">{{ $session.String "raceName" }}</p>
-
-        <div class="margin-block-10"></div>
-
-        <!--FP1-->
-        <p class="color-primary" style="font-size: 15px;">
-          <span>Free Practice 1</span>
-          {{ $fp1datetime := .JSON.String "race.0.schedule.fp1.datetime_rfc3339" }}
-          {{ $parsedFP1Time := parseLocalTime "2006-01-02T15:04:05Z07:00" $fp1datetime }}
-          {{ if $parsedFP1Time.Before now }}
-            <span class="color-highlight">🏁</span>
-          {{ else }}
-            <span class="color-highlight" {{ parseRelativeTime "rfc3339" $fp1datetime }}></span>
-          {{ end }}
-        </p>
-        {{ $fp1 := .JSON.String "race.0.schedule.fp1.datetime_rfc3339" }}
-        <p class="size-h5" style="font-size: 13px;">{{ slice $fp1 0 10 }} {{ slice $fp1 11 16 }}</p>
-
-        <!--Sprint Qualifying-->
-        {{ if and (ne ($.JSON.String "race.0.schedule.sprintQualy.date") "null") (ne ($.JSON.String "race.0.schedule.sprintQualy.date") "") }}
-        <p class="color-primary" style="font-size: 15px;">
-          <span>Sprint Qualifying</span>
-          {{ $sqdatetime := .JSON.String "race.0.schedule.sprintQualy.datetime_rfc3339" }}
-          {{ $parsedSQTime := parseLocalTime "2006-01-02T15:04:05Z07:00" $sqdatetime }}
-          {{ if $parsedSQTime.Before now }}
-            <span class="color-highlight">🏁</span>
-          {{ else }}
-            <span class="color-highlight" {{ parseRelativeTime "rfc3339" $sqdatetime }}></span>
-          {{ end }}
-        </p>
-        {{ $sq := .JSON.String "race.0.schedule.sprintQualy.datetime_rfc3339" }}
-        <p class="size-h5" style="font-size: 13px;">{{ slice $sq 0 10 }} {{ slice $sq 11 16 }}</p>
-        {{ end }}
-
-        <!--Sprint Race-->
-        {{ if and (ne ($.JSON.String "race.0.schedule.sprintRace.date") "null") (ne ($.JSON.String "race.0.schedule.sprintRace.date") "") }}
-        <p class="color-primary" style="font-size: 15px;">
-          <span>Sprint Race</span>
-          {{ $srdatetime := .JSON.String "race.0.schedule.sprintRace.datetime_rfc3339" }}
-          {{ $parsedSRTime := parseLocalTime "2006-01-02T15:04:05Z07:00" $srdatetime }}
-          {{ if $parsedSRTime.Before now }}
-            <span class="color-highlight">🏁</span>
-          {{ else }}
-            <span class="color-highlight" {{ parseRelativeTime "rfc3339" $srdatetime }}></span>
-          {{ end }}
-        </p>
-        {{ $sr := .JSON.String "race.0.schedule.sprintRace.datetime_rfc3339" }}
-        <p class="size-h5" style="font-size: 13px;">{{ slice $sr 0 10 }} {{ slice $sr 11 16 }}</p>
-        {{ end }}
-
-        <!--FP2-->
-        {{ if and (ne ($.JSON.String "race.0.schedule.fp2.date") "null") (ne ($.JSON.String "race.0.schedule.fp2.date") "") }}
-        <p class="color-primary" style="font-size: 15px;">
-          <span>Free Practice 2</span>
-          {{ $fp2datetime := .JSON.String "race.0.schedule.fp2.datetime_rfc3339" }}
-          {{ $parsedFP2Time := parseLocalTime "2006-01-02T15:04:05Z07:00" $fp2datetime }}
-          {{ if $parsedFP2Time.Before now }}
-            <span class="color-highlight">🏁</span>
-          {{ else }}
-            <span class="color-highlight" {{ parseRelativeTime "rfc3339" $fp2datetime }}></span>
-          {{ end }}
-        </p>
-        {{ $fp2 := .JSON.String "race.0.schedule.fp2.datetime_rfc3339" }}
-        <p class="size-h5" style="font-size: 13px;">{{ slice $fp2 0 10 }} {{ slice $fp2 11 16 }}</p>
-        {{ end }}
-
-        <!--FP3-->
-        {{ if and (ne ($.JSON.String "race.0.schedule.fp3.date") "null") (ne ($.JSON.String "race.0.schedule.fp3.date") "") }}
-        <p class="color-primary" style="font-size: 15px;">
-          <span>Free Practice 3</span>
-          {{ $fp3datetime := .JSON.String "race.0.schedule.fp3.datetime_rfc3339" }}
-          {{ $parsedFP3Time := parseLocalTime "2006-01-02T15:04:05Z07:00" $fp3datetime }}
-          {{ if $parsedFP3Time.Before now }}
-            <span class="color-highlight">🏁</span>
-          {{ else }}
-            <span class="color-highlight" {{ parseRelativeTime "rfc3339" $fp3datetime }}></span>
-          {{ end }}
-        </p>
-        {{ $fp3 := .JSON.String "race.0.schedule.fp3.datetime_rfc3339" }}
-        <p class="size-h5" style="font-size: 13px;">{{ slice $fp3 0 10 }} {{ slice $fp3 11 16 }}</p>
-        {{ end }}
-
-        <!--Qualifying-->
-        <p class="color-primary" style="font-size: 15px;">
-          <span>Qualifying</span>
-          {{ $qualydatetime := .JSON.String "race.0.schedule.qualy.datetime_rfc3339" }}
-          {{ $parsedQUALYTime := parseLocalTime "2006-01-02T15:04:05Z07:00" $qualydatetime }}
-          {{ if $parsedQUALYTime.Before now }}
-            <span class="color-highlight">🏁</span>
-          {{ else }}
-            <span class="color-highlight" {{ parseRelativeTime "rfc3339" $qualydatetime }}></span>
-          {{ end }}
-        </p>
-        {{ $qualy := .JSON.String "race.0.schedule.qualy.datetime_rfc3339" }}
-        <p class="size-h5" style="font-size: 13px;">{{ slice $qualy 0 10 }} {{ slice $qualy 11 16 }}</p>
-
-        <!--Race-->
-        <p class="color-primary" style="font-size: 15px;">
-          <span>Race</span>
-          {{ $racedatetime := .JSON.String "race.0.schedule.race.datetime_rfc3339" }}
-          {{ $parsedRACETime := parseLocalTime "2006-01-02T15:04:05Z07:00" $racedatetime }}
-          {{ if $parsedRACETime.Before now }}
-            <span class="color-highlight">🏁</span>
-          {{ else }}
-            <span class="color-highlight" {{ parseRelativeTime "rfc3339" $racedatetime }}></span>
-          {{ end }}
-        </p>
-        {{ $race := .JSON.String "race.0.schedule.race.datetime_rfc3339" }}
-        <p class="size-h5" style="font-size: 13px;">{{ slice $race 0 10 }} {{ slice $race 11 16 }}</p>
-
-      </div>
-
-      {{ if .JSON.String "map_svg" }}
-      <div style="margin-block: 1rem;">
-        {{ .JSON.String "map_svg" }}
-      </div>
-      {{ end }}
-
-      <p class="color-highlight" style="font-size: 14px;">Circuit Details</p>
-      <p class="size-h6" style="font-size: 13px;">{{ $session.String "circuit.circuitName" }}</p>
-      <p class="size-h6" style="font-size: 13px;">{{ $session.String "laps" }} laps @ {{ $session.String "circuit.circuitLengthKm" }} km</p>
-      <p class="size-h6" style="font-size: 13px;">Lap record: {{ $session.String "circuit.lapRecord" }}, {{ $session.String "circuit.fastestLapDriverName" }} ({{ $session.String "circuit.fastestLapYear" }})</p>
-    </div>from fastapi import APIRouter
+from fastapi import APIRouter
 from fastapi_cache import FastAPICache
 import httpx
 from datetime import datetime, timedelta
@@ -369,6 +235,17 @@ async def get_next_race():
         expiry_dt = now + timedelta(seconds=expire)
 
 
+    # Fetch inline SVG map
+    map_svg = ""
+    try:
+        from .map.router import generate_historical_track_map
+        map_svg = generate_historical_track_map({
+            "race": [next_race],
+            "season": calendar_data.get("season"),
+        })
+    except Exception as e:
+        print(f"Map generation failed: {e}")
+
     # Output data
     response_data = {
         "season": calendar_data.get("season"),
@@ -377,6 +254,7 @@ async def get_next_race():
         "timezone": TZ,
         "next_event": next_event,
         "cache_expires": expiry_dt.isoformat(),
+        "map_svg": map_svg,
         "race": [next_race]
     }
 
