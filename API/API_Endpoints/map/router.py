@@ -164,4 +164,11 @@ async def get_dynamic_track_map():
         "signature": upstream_signature
         }, expire=expire_seconds)
 
+    # Write SVG to shared assets folder so Glance can serve it over HTTPS
+    try:
+        with open("/app/assets/track_map.svg", "w") as f:
+            f.write(svg_content)
+    except Exception as e:
+        print(f"Failed to write track map to assets: {e}")
+
     return Response(content=svg_content, media_type="image/svg+xml")
