@@ -4,6 +4,7 @@ import fastf1
 import asyncio
 from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime
+import pytz
 
 from .helpers.time_functions import MT
 
@@ -25,13 +26,95 @@ executor = ThreadPoolExecutor(max_workers=4)
 def load_session_sync(year, gp_round, session_type):
     try:
         session = fastf1.get_session(year, gp_round, session_type)
-        session.load(laps=False, telemetry=False, weather=False, messages=False)
+
+        # Practice sessions need laps for timing data; results sessions use results
+        is_practice = session_type in ("FP1", "FP2", "FP3")
+        if is_practice:
+            session.load(laps=True, telemetry=False, weather=False, messages=False)
+        else:
+            session.load(laps=False, telemetry=False, weather=False, messages=False)
+
         return session
+    except Exception as e:
+        print(f"Failed to load {session_type}: {e}")
+        return None
+
+
+def session_has_happened(session):
+    try:
+        session_date = session.date
+        if session_date is None:
+            return False
+        if hasattr(session_date, 'tzinfo') and session_date.tzinfo is None:
+            session_date = pytz.utc.localize(session_date)
+        session_date = session_date.astimezone(MT)
+        now = datetime.now(MT)
+        return session_date < now
     except Exception:
+        return False
+
+
+def format_practice_results(session):
+    """For FP sessions, use fastest lap per driver."""
+    try:
+        laps = session.laps
+        if laps is None or laps.empty:
+            return None
+
+        # Get fastest lap per driver
+        fastest = laps.groupby("DriverNumber")["LapTime"].min().reset_index()
+        fastest = fastest.sort_values("LapTime")
+
+        drivers = []
+        for pos, (_, row) in enumerate(fastest.iterrows(), start=1):
+            driver_number = row["DriverNumber"]
+            lap_time = row["LapTime"]
+
+            # Get driver info
+            driver_laps = laps[laps["DriverNumber"] == driver_number]
+            if driver_laps.empty:
+                continue
+
+            driver_row = driver_laps.iloc[0]
+            abbrev = driver_row.get("Driver", "")
+            team = driver_row.get("Team", "")
+
+            # Format lap time
+            if hasattr(lap_time, 'total_seconds'):
+                total = lap_time.total_seconds()
+                mins = int(total // 60)
+                secs = total % 60
+                time_str = f"{mins}:{secs:06.3f}"
+            else:
+                time_str = str(lap_time)
+
+            # Get flag from session results if available
+            flag = ""
+            try:
+                result_row = session.results[session.results["Abbreviation"] == abbrev]
+                if not result_row.empty:
+                    flag = str(result_row.iloc[0].get("CountryCode", "")).lower()
+            except Exception:
+                pass
+
+            drivers.append({
+                "position": pos,
+                "surname": abbrev,
+                "shortName": abbrev,
+                "flag": flag,
+                "team": team,
+                "time": time_str,
+            })
+
+        return drivers if drivers else None
+
+    except Exception as e:
+        print(f"Error formatting practice results: {e}")
         return None
 
 
 def format_results(session, session_type):
+    """For quali/race sessions, use results table."""
     try:
         results = session.results
         if results is None or results.empty:
@@ -45,15 +128,11 @@ def format_results(session, session_type):
             except Exception:
                 position = "-"
 
-            # Format time
-            if session_type == "Q":
-                time_val = row.get("Q3") or row.get("Q2") or row.get("Q1")
-            elif session_type == "SQ":
+            if session_type in ("Q", "SQ"):
                 time_val = row.get("Q3") or row.get("Q2") or row.get("Q1")
             else:
                 time_val = row.get("Time")
 
-            # Convert timedelta to string
             if hasattr(time_val, 'total_seconds'):
                 total = time_val.total_seconds()
                 if total < 0:
@@ -61,31 +140,28 @@ def format_results(session, session_type):
                 else:
                     mins = int(total // 60)
                     secs = total % 60
-                    if mins > 0:
-                        time_str = f"{mins}:{secs:06.3f}"
-                    else:
-                        time_str = f"{secs:.3f}"
-            elif time_val is None or (hasattr(time_val, '__class__') and 'NaT' in str(type(time_val))):
+                    time_str = f"{mins}:{secs:06.3f}" if mins > 0 else f"{secs:.3f}"
+            elif time_val is None or "NaT" in str(type(time_val)):
                 status = row.get("Status", "")
                 time_str = status if status else "DNF"
             else:
                 time_str = str(time_val) if time_val else ""
 
-            # Country code from nationality
-            nationality = str(row.get("CountryCode", "")).lower()
+            flag = str(row.get("CountryCode", "")).lower()
 
             drivers.append({
                 "position": position,
                 "surname": row.get("LastName", ""),
                 "shortName": row.get("Abbreviation", ""),
-                "flag": nationality,
+                "flag": flag,
                 "team": row.get("TeamName", ""),
                 "time": time_str,
             })
 
-        return drivers
+        return drivers if drivers else None
 
     except Exception as e:
+        print(f"Error formatting results: {e}")
         return None
 
 
@@ -98,22 +174,19 @@ async def fetch_session_fastf1(year, gp_round, session_type, label):
         if session is None:
             return None
 
-        # Only include sessions that have already happened
-        session_date = session.date
-        if session_date is None:
+        if not session_has_happened(session):
             return None
 
-        now = datetime.now(MT)
-        if hasattr(session_date, 'tzinfo') and session_date.tzinfo is None:
-            import pytz
-            session_date = pytz.utc.localize(session_date).astimezone(MT)
+        is_practice = session_type in ("FP1", "FP2", "FP3")
+        results = format_practice_results(session) if is_practice else format_results(session, session_type)
 
-        if session_date > now:
-            return None  # Session hasn't happened yet
-
-        results = format_results(session, session_type)
         if not results:
             return None
+
+        session_date = session.date
+        if hasattr(session_date, 'tzinfo') and session_date.tzinfo is None:
+            session_date = pytz.utc.localize(session_date)
+        session_date = session_date.astimezone(MT)
 
         return {
             "key": session_type,
@@ -124,7 +197,8 @@ async def fetch_session_fastf1(year, gp_round, session_type, label):
             "results": results,
         }
 
-    except Exception:
+    except Exception as e:
+        print(f"Error fetching {session_type}: {e}")
         return None
 
 
@@ -140,26 +214,25 @@ async def get_session_results():
     now = datetime.now(MT)
     year = now.year
 
-    # Get current round from next_race cache if available
+    # Get current round from next_race cache
     next_race_cached = await cache.get("f1:next_race")
     if next_race_cached:
         gp_round = next_race_cached.get("round")
     else:
-        # Fallback: use current date to find round
-        schedule = await asyncio.get_event_loop().run_in_executor(
-            executor, fastf1.get_event_schedule, year
-        )
-        # Find the most recent or current event
-        current_event = None
-        for _, event in schedule.iterrows():
-            event_date = event.get("EventDate")
-            if event_date and event_date <= now.date():
-                current_event = event
-        if current_event is None:
-            return {"raceName": "", "sessions": []}
-        gp_round = int(current_event.get("RoundNumber", 1))
+        loop = asyncio.get_event_loop()
+        try:
+            schedule = await loop.run_in_executor(executor, fastf1.get_event_schedule, year)
+            current_event = None
+            for _, event in schedule.iterrows():
+                event_date = event.get("EventDate")
+                if event_date and str(event_date)[:10] <= now.strftime("%Y-%m-%d"):
+                    current_event = event
+            if current_event is None:
+                return {"raceName": "", "sessions": []}
+            gp_round = int(current_event.get("RoundNumber", 1))
+        except Exception as e:
+            return {"raceName": "", "sessions": [], "error": str(e)}
 
-    # Fetch all sessions concurrently
     tasks = [
         fetch_session_fastf1(year, gp_round, session_type, label)
         for session_type, label in SESSION_MAP
@@ -174,6 +247,5 @@ async def get_session_results():
         "sessions": sessions,
     }
 
-    # Cache for 30 minutes
     await cache.set(cache_key, response_data, expire=1800)
     return response_data
